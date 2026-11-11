@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from taskflow.api import auth
 from taskflow.database import init_models
 
 
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    app.include_router(auth.router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:
