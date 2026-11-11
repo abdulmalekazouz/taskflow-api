@@ -37,6 +37,14 @@ http://127.0.0.1:8000/docs.
 - **JWT authentication.** Register with email/password (bcrypt-hashed),
   log in via the OAuth2 password grant, and use the returned bearer
   token on subsequent requests.
+- **Projects with membership-based authorization.** Creating a project
+  makes you its owner; only the owner can add members by email; every
+  project route 403s for non-members, and project/task ids that exist
+  but you can't see are indistinguishable from ones that don't exist.
+- **Tasks with filtering and pagination.** Create, partially update
+  (PATCH), and delete tasks; list them filtered by status/assignee and
+  paginated (`page`, `page_size`), with a total count for building a UI
+  pager.
 
 ## Project layout
 
@@ -45,7 +53,7 @@ src/taskflow/
     config.py         Environment-driven settings
     database.py         Async engine/session setup
     security.py           Password hashing and JWT create/verify
-    dependencies.py          get_current_user and other shared dependencies
+    dependencies.py          Auth + project-membership/ownership checks
     models/                    SQLAlchemy ORM models
     schemas/                     Pydantic request/response schemas
     api/                            One router module per resource
@@ -65,6 +73,23 @@ curl -X POST localhost:8000/auth/login \
 # -> {"access_token": "...", "token_type": "bearer"}
 
 curl localhost:8000/auth/me -H "Authorization: Bearer <access_token>"
+```
+
+### Projects & tasks
+
+```bash
+AUTH="Authorization: Bearer <access_token>"
+
+curl -X POST localhost:8000/projects -H "$AUTH" \
+    -H "Content-Type: application/json" -d '{"name": "Launch"}'
+
+curl -X POST localhost:8000/projects/1/members -H "$AUTH" \
+    -H "Content-Type: application/json" -d '{"email": "bob@example.com"}'
+
+curl -X POST localhost:8000/projects/1/tasks -H "$AUTH" \
+    -H "Content-Type: application/json" -d '{"title": "Write README"}'
+
+curl "localhost:8000/projects/1/tasks?status=todo&page=1&page_size=20" -H "$AUTH"
 ```
 
 ## Testing
