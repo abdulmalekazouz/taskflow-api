@@ -32,14 +32,39 @@ uvicorn taskflow.main:app --reload
 Interactive API docs (Swagger UI) are then available at
 http://127.0.0.1:8000/docs.
 
+## Features
+
+- **JWT authentication.** Register with email/password (bcrypt-hashed),
+  log in via the OAuth2 password grant, and use the returned bearer
+  token on subsequent requests.
+
 ## Project layout
 
 ```
 src/taskflow/
-    config.py       Environment-driven settings
-    database.py      Async engine/session setup
-    main.py            FastAPI application factory
+    config.py         Environment-driven settings
+    database.py         Async engine/session setup
+    security.py           Password hashing and JWT create/verify
+    dependencies.py          get_current_user and other shared dependencies
+    models/                    SQLAlchemy ORM models
+    schemas/                     Pydantic request/response schemas
+    api/                            One router module per resource
+    main.py                            FastAPI application factory
 tests/              pytest suite (async, isolated in-memory DB per test)
+```
+
+## Authentication
+
+```bash
+curl -X POST localhost:8000/auth/register \
+    -H "Content-Type: application/json" \
+    -d '{"email": "alice@example.com", "password": "correct-horse", "display_name": "Alice"}'
+
+curl -X POST localhost:8000/auth/login \
+    -d "username=alice@example.com&password=correct-horse"
+# -> {"access_token": "...", "token_type": "bearer"}
+
+curl localhost:8000/auth/me -H "Authorization: Bearer <access_token>"
 ```
 
 ## Testing

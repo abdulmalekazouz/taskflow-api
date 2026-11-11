@@ -20,6 +20,8 @@ dependencies = [
     "pydantic>=2.4,<3",
     "bcrypt>=4.1,<5",
     "PyJWT>=2.8,<3",
+    "email-validator>=2.1,<3",
+    "python-multipart>=0.0.9,<1",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +44,12 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+# B008 (function call in a default argument) is a false positive for
+# FastAPI's Depends(...) pattern, which is the framework's intended,
+# idiomatic way to declare a dependency.
+ignore = ["B008"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
