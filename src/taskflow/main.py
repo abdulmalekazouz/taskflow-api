@@ -11,8 +11,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from taskflow.api import auth, projects, tasks
+from taskflow.api import auth, notifications, projects, tasks
 from taskflow.database import init_models
+from taskflow.middleware import RateLimitConfig, RateLimitMiddleware
 
 
 @asynccontextmanager
@@ -30,8 +31,16 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-def create_app() -> FastAPI:
+def create_app(rate_limit: RateLimitConfig | None = RateLimitConfig()) -> FastAPI:
     """Builds the taskflow FastAPI application.
+
+    Args:
+        rate_limit: Rate-limit parameters for `RateLimitMiddleware`, or
+            `None` to skip installing the middleware entirely (used by
+            most of this project's own tests, so a large shared test
+            suite firing many requests from the same client doesn't trip
+            the limiter; see `tests/test_rate_limit.py` for a dedicated
+            test of the middleware itself).
 
     Returns:
         A configured `FastAPI` instance with its lifespan handler
@@ -44,9 +53,13 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    if rate_limit is not None:
+        app.add_middleware(RateLimitMiddleware, config=rate_limit)
+
     app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(tasks.router)
+    app.include_router(notifications.router)
 
     @app.get("/health", tags=["meta"])
     async def health() -> dict[str, str]:

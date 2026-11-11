@@ -64,3 +64,19 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency that yields a request-scoped async DB session."""
     async with SessionLocal() as session:
         yield session
+
+
+async def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """FastAPI dependency exposing the session factory itself.
+
+    Unlike `get_db` (one request-scoped session), this is for code that
+    needs to open its *own* session outside the request's lifecycle --
+    chiefly background tasks, which run after the response (and the
+    request-scoped session) may already be gone. Overridden in tests the
+    same way as `get_db`, so background tasks exercised by a test use the
+    test's in-memory database rather than the real one.
+
+    Returns:
+        The session factory to use.
+    """
+    return SessionLocal

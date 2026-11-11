@@ -6,8 +6,9 @@ relationship forward-reference resolution) needs to see the full set.
 """
 
 from taskflow.models.membership import ProjectMembership
+from taskflow.models.notification import Notification
 from taskflow.models.project import Project
 from taskflow.models.task import Task, TaskStatus
 from taskflow.models.user import User
 
-__all__ = ["Project", "ProjectMembership", "Task", "TaskStatus", "User"]
+__all__ = ["Notification", "Project", "ProjectMembership", "Task", "TaskStatus", "User"]

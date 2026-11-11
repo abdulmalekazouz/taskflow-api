@@ -13,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from taskflow.database import Base, get_db
+from taskflow.database import Base, get_db, get_session_factory
 from taskflow.main import create_app
 
 
@@ -37,18 +37,21 @@ async def session_factory():
 async def client(session_factory):
     """An `AsyncClient` wired to a fresh app instance and test database.
 
-    Overrides the `get_db` dependency so every request in a test uses the
+    Overrides the `get_db`/`get_session_factory` dependencies so every
+    request -- and every background task a request queues -- uses the
     test's own in-memory database rather than the app's real one. The
     app's `lifespan` (which would otherwise create tables in the real,
-    file-based database) is explicitly disabled.
+    file-based database) is explicitly disabled, and so is the rate
+    limiter (see `create_app`'s docstring).
     """
-    app = create_app()
+    app = create_app(rate_limit=None)
 
     async def override_get_db():
         async with session_factory() as session:
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_session_factory] = lambda: session_factory
 
     # ASGITransport never runs the app's lifespan handlers, so the
     # `lifespan`-driven init_models() call (which targets the real,

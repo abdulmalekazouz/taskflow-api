@@ -7,13 +7,14 @@ data is touched.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from taskflow.database import get_db
+from taskflow.database import get_db, get_session_factory
 from taskflow.dependencies import get_project_membership
 from taskflow.models.task import Task, TaskStatus
+from taskflow.notifications import notify_assignment
 from taskflow.schemas.task import TaskCreate, TaskPage, TaskRead, TaskUpdate
 
 router = APIRouter(
@@ -32,14 +33,24 @@ async def _get_task_or_404(project_id: int, task_id: int, db: AsyncSession) -> T
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 async def create_task(
-    project_id: int, payload: TaskCreate, db: AsyncSession = Depends(get_db)
+    project_id: int,
+    payload: TaskCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    session_factory: async_sessionmaker[AsyncSession] = Depends(get_session_factory),
 ) -> Task:
     """Creates a task within a project.
+
+    If the task is created with an assignee, queues a background
+    notification for them (see `taskflow.notifications`).
 
     Args:
         project_id: The owning project.
         payload: The task's title/description/assignee/due date.
+        background_tasks: FastAPI's background-task queue.
         db: The request-scoped database session.
+        session_factory: Used by the queued notification task, which
+            runs after this request's session may already be closing.
 
     Returns:
         The newly created task.
@@ -48,6 +59,15 @@ async def create_task(
     db.add(task)
     await db.commit()
     await db.refresh(task)
+
+    if task.assignee_id is not None:
+        background_tasks.add_task(
+            notify_assignment,
+            session_factory,
+            task.assignee_id,
+            f"You were assigned to task '{task.title}'.",
+        )
+
     return task
 
 
@@ -107,24 +127,45 @@ async def get_task(project_id: int, task_id: int, db: AsyncSession = Depends(get
 
 @router.patch("/{task_id}", response_model=TaskRead)
 async def update_task(
-    project_id: int, task_id: int, payload: TaskUpdate, db: AsyncSession = Depends(get_db)
+    project_id: int,
+    task_id: int,
+    payload: TaskUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    session_factory: async_sessionmaker[AsyncSession] = Depends(get_session_factory),
 ) -> Task:
     """Partially updates a task; only fields present in the body change.
+
+    If the update sets (or changes) the assignee, queues a background
+    notification for the newly assigned user.
 
     Args:
         project_id: The owning project.
         task_id: The task to update.
         payload: The fields to change.
+        background_tasks: FastAPI's background-task queue.
         db: The request-scoped database session.
+        session_factory: Used by the queued notification task, which
+            runs after this request's session may already be closing.
 
     Returns:
         The updated task.
     """
     task = await _get_task_or_404(project_id, task_id, db)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
         setattr(task, field, value)
     await db.commit()
     await db.refresh(task)
+
+    if "assignee_id" in changes and task.assignee_id is not None:
+        background_tasks.add_task(
+            notify_assignment,
+            session_factory,
+            task.assignee_id,
+            f"You were assigned to task '{task.title}'.",
+        )
+
     return task
 
 

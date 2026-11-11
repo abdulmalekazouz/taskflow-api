@@ -45,6 +45,12 @@ http://127.0.0.1:8000/docs.
   (PATCH), and delete tasks; list them filtered by status/assignee and
   paginated (`page`, `page_size`), with a total count for building a UI
   pager.
+- **Background notifications.** Assigning a task (on creation or via a
+  later PATCH) queues a `BackgroundTasks` job that notifies the
+  assignee -- without the request waiting on it -- which the assignee
+  can then list and mark as read.
+- **Rate limiting.** A per-client-IP, fixed-window request limiter,
+  implemented as ASGI middleware.
 
 ## Project layout
 
@@ -54,10 +60,12 @@ src/taskflow/
     database.py         Async engine/session setup
     security.py           Password hashing and JWT create/verify
     dependencies.py          Auth + project-membership/ownership checks
-    models/                    SQLAlchemy ORM models
-    schemas/                     Pydantic request/response schemas
-    api/                            One router module per resource
-    main.py                            FastAPI application factory
+    notifications.py          Background notification delivery
+    middleware.py               Per-IP rate-limiting middleware
+    models/                        SQLAlchemy ORM models
+    schemas/                         Pydantic request/response schemas
+    api/                                One router module per resource
+    main.py                                FastAPI application factory
 tests/              pytest suite (async, isolated in-memory DB per test)
 ```
 
@@ -92,12 +100,43 @@ curl -X POST localhost:8000/projects/1/tasks -H "$AUTH" \
 curl "localhost:8000/projects/1/tasks?status=todo&page=1&page_size=20" -H "$AUTH"
 ```
 
+### Notifications
+
+```bash
+curl -X POST localhost:8000/projects/1/tasks -H "$AUTH" \
+    -H "Content-Type: application/json" -d '{"title": "Review PR", "assignee_id": 2}'
+# -> queues a background notification for user 2
+
+curl localhost:8000/notifications -H "Authorization: Bearer <user-2-access-token>"
+curl -X POST localhost:8000/notifications/1/read -H "Authorization: Bearer <user-2-access-token>"
+```
+
+## Interactive docs
+
+![Swagger UI](docs/screenshot-swagger-ui.jpg)
+
 ## Testing
 
 ```bash
 pytest --cov=taskflow --cov-report=term-missing
 ruff check src tests
 ```
+
+## Limitations
+
+- **Notifications are in-app, not real email/push.** Assigning a task
+  stores a `Notification` row instead of sending actual mail; swapping
+  in a real email provider would mean changing only
+  `taskflow.notifications`.
+- **The rate limiter is single-process and in-memory.** It does not
+  coordinate across multiple worker processes; a real multi-worker
+  deployment would need a shared store (e.g. Redis).
+- **No database migrations.** Tables are created with
+  `metadata.create_all` on startup rather than a migration tool (e.g.
+  Alembic), which is fine for this project's scope but would not track
+  schema changes over time in a real deployment.
+- **Deletion permissions are permissive.** Any project member (not just
+  the owner) can delete a task, as a deliberate scope simplification.
 
 ## License
 
