@@ -49,7 +49,14 @@ target-version = "py310"
 # B008 (function call in a default argument) is a false positive for
 # FastAPI's Depends(...) pattern, which is the framework's intended,
 # idiomatic way to declare a dependency.
-ignore = ["B008"]
+#
+# UP037 (remove quotes from type annotation) would break SQLAlchemy
+# relationships here: classes referenced only under `TYPE_CHECKING` (to
+# avoid circular imports) are not actually bound at runtime, so
+# SQLAlchemy's Mapped[...] relationship resolution needs them to stay
+# quoted forward references, matching SQLAlchemy's own documented
+# pattern for cross-module relationships.
+ignore = ["B008", "UP037"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

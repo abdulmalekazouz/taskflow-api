@@ -57,3 +57,27 @@ async def client(session_factory):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as async_client:
         yield async_client
+
+
+@pytest_asyncio.fixture
+async def register_and_login(client):
+    """Returns an async helper that registers a user and logs them in.
+
+    Usage: `headers = await register_and_login("alice@example.com")` then
+    pass `headers=headers` on subsequent requests made with `client`.
+    """
+
+    async def _register_and_login(
+        email: str, password: str = "correct-horse", display_name: str = "Test User"
+    ) -> dict[str, str]:
+        await client.post(
+            "/auth/register",
+            json={"email": email, "password": password, "display_name": display_name},
+        )
+        response = await client.post(
+            "/auth/login", data={"username": email, "password": password}
+        )
+        token = response.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    return _register_and_login
